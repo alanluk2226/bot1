@@ -1,11 +1,11 @@
 # bot1
 
-電腦是大腦，機器人是軀體。
+The computer is the brain. The robot is the body.
 
-![四足機器人](docs/robot.jpg)
+![The quad robot](docs/robot.jpg)
 
-照片裡是這隻四足機器人。中間是 ESP32，紅色燈亮著表示板子有電。周圍的線接到八顆舵機：連在肢體上的馬達只做水平轉動，連在腳上的馬達負責把腳抬高或放下。
+The photo shows the four-legged robot. The ESP32 sits in the middle, and the red light means the board is powered. The wires go to eight servos. The motors on the limbs only rotate the legs sideways. The motors on the feet raise and lower each foot.
 
-大腦放在電腦上，不是放在這塊板子裡。神經元來自 [FlyWire Codex 的 FAFB 果蠅腦](https://codex.flywire.ai/?dataset=fafb)。載進來負責朝向和轉向的一共 167 顆，包括 EPG、PEN、PEG、PFL、DNa01 和 DNa02，彼此之間有 1968 條突觸。電腦用這些神經元算出現在面朝哪裡、該轉向還是前進，再把指令送到 ESP32。機器人只負責動那八顆舵機。
+The brain runs on the computer, not on the board. The neurons come from the [FlyWire Codex FAFB fruit-fly brain](https://codex.flywire.ai/?dataset=fafb). The loaded set is the heading and steering group: 167 neurons, including EPG, PEN, PEG, PFL, DNa01, and DNa02, with 1,968 synapses between them. The computer uses these neurons to decide the current heading and whether to turn or walk forward, then sends that command to the ESP32. The robot only moves the eight servos.
 
-FlyWire 裡整顆腦大約有十四萬顆神經元。現在電腦上跑的是從這份 FAFB 資料取出來的這一小群，不是整顆腦。怎麼讓它自己走，之後再做。
+The full FlyWire brain has about 140,000 neurons. The computer is running this small group taken from the FAFB data, not the whole brain. Making it walk on its own comes later.
