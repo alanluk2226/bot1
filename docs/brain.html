@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bot1 · Neurons on this robot</title>
+<style>
+  :root {
+    --bg: #07080d;
+    --panel: rgba(16, 18, 28, 0.88);
+    --line: rgba(255, 255, 255, 0.08);
+    --text: #e8edf5;
+    --muted: #8b95a8;
+    --compass: #5ec8ff;
+    --update: #c084fc;
+    --steer: #6ee7b7;
+    --descend: #fcd34d;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+  body {
+    font-family: "Segoe UI", sans-serif;
+    display: grid;
+    grid-template-rows: 52px 1fr 168px;
+    height: 100vh;
+    overflow: hidden;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--line);
+    background: #0b0d14;
+  }
+  header h1 { font-size: 15px; font-weight: 650; margin: 0; letter-spacing: 0.02em; }
+  header .meta { color: var(--muted); font-size: 12px; }
+  header .meta b { color: var(--text); font-weight: 600; }
+  main {
+    display: grid;
+    grid-template-columns: 280px 1fr 320px;
+    min-height: 0;
+  }
+  aside, section {
+    min-height: 0;
+    border-right: 1px solid var(--line);
+  }
+  section.stage { border-right: 1px solid var(--line); position: relative; }
+  aside.right { border-right: 0; border-left: 1px solid var(--line); }
+  .pad { padding: 14px 14px 8px; }
+  h2 {
+    margin: 0 0 8px;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 650;
+  }
+  .scroll { height: calc(100% - 0px); overflow: auto; }
+  button.type {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 10px 1fr auto;
+    gap: 8px;
+    align-items: center;
+    text-align: left;
+    background: transparent;
+    color: var(--text);
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 7px 8px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+  }
+  button.type:hover, button.type.on { background: rgba(255,255,255,0.05); border-color: var(--line); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .count { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .note { color: var(--muted); font-size: 12px; line-height: 1.45; margin: 8px 8px 14px; }
+  canvas { width: 100%; height: 100%; display: block; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  .hint {
+    position: absolute;
+    left: 14px;
+    bottom: 12px;
+    color: var(--muted);
+    font-size: 12px;
+    pointer-events: none;
+  }
+  .card {
+    margin: 0 12px 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: rgba(255,255,255,0.03);
+  }
+  .card h3 { margin: 0 0 6px; font-size: 13px; }
+  .card p, .card li { margin: 0; color: #c5cedb; font-size: 12px; line-height: 1.45; }
+  .card ul { margin: 6px 0 0; padding-left: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  td { padding: 3px 0; color: #c5cedb; }
+  td:last-child { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+  footer {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 12px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--line);
+    background: #0b0d14;
+  }
+  .flow { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+  .step {
+    flex: 1;
+    min-width: 140px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 8px 10px;
+    background: rgba(255,255,255,0.03);
+  }
+  .step b { display: block; font-size: 12px; margin-bottom: 4px; }
+  .step span { color: var(--muted); font-size: 12px; line-height: 1.4; }
+  .robot {
+    width: 100%;
+    height: 150px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>bot1 · Neurons loaded on this robot</h1>
+  <div class="meta">FlyWire FAFB v783 · <b id="nCount">167</b> neurons · <b id="eCount">1968</b> synapses</div>
+  <div class="meta">The computer is the brain. The ESP32 only moves the eight servos.</div>
+</header>
+<main>
+  <aside>
+    <div class="scroll pad">
+      <h2>Loaded cell types</h2>
+      <div id="types"></div>
+      <p class="note">Click a cell type to highlight it. These 167 neurons only carry heading and left-right steering. Sugar, shadow, antenna, and mouthpart neurons are not loaded.</p>
+      <h2>Behaviors on this page</h2>
+      <div class="card">
+        <h3>Walk forward</h3>
+        <p>When the compass error is within about 30°. The front-left and rear-right feet step, then the front-right and rear-left feet.</p>
+      </div>
+      <div class="card">
+        <h3>Turn</h3>
+        <p>A larger error lengthens the outside step and shortens the inside step. DNa02 left and right rates are shown. The turn size follows the EPG angle.</p>
+      </div>
+      <div class="card">
+        <h3>Stand</h3>
+        <p>After stop is typed in the terminal, all eight servos return to 90° and stay powered.</p>
+      </div>
+    </div>
+  </aside>
+  <section class="stage">
+    <canvas id="view"></canvas>
+    <div class="hint">Drag to rotate · scroll to zoom · positions from the fly brain</div>
+  </section>
+  <aside class="right">
+    <div class="scroll pad">
+      <h2>Robot</h2>
+      <svg class="robot" viewBox="0 0 320 170" aria-label="Top view of the quadruped">
+        <rect x="118" y="48" width="84" height="74" rx="8" fill="#161b28" stroke="#3a4458"/>
+        <text x="160" y="90" text-anchor="middle" fill="#d5deea" font-size="12">ESP32</text>
+        <g fill="none" stroke="#5ec8ff" stroke-width="3" stroke-linecap="round">
+          <path d="M118 62 H78 V38"/><path d="M202 62 H242 V38"/>
+          <path d="M118 108 H78 V132"/><path d="M202 108 H242 V132"/>
+        </g>
+        <g fill="#fcd34d">
+          <circle cx="78" cy="38" r="5"/><circle cx="242" cy="38" r="5"/>
+          <circle cx="78" cy="132" r="5"/><circle cx="242" cy="132" r="5"/>
+          <circle cx="118" cy="62" r="4"/><circle cx="202" cy="62" r="4"/>
+          <circle cx="118" cy="108" r="4"/><circle cx="202" cy="108" r="4"/>
+        </g>
+        <g fill="#8b95a8" font-size="10">
+          <text x="52" y="34">FR</text><text x="248" y="34">FL</text>
+          <text x="52" y="148">RR</text><text x="248" y="148">RL</text>
+        </g>
+      </svg>
+      <div class="card">
+        <h3>Eight servos</h3>
+        <table>
+          <tr><td>Front-right hip / knee</td><td>GPIO 12 / 25</td></tr>
+          <tr><td>Front-left hip / knee</td><td>GPIO 16 / 18</td></tr>
+          <tr><td>Rear-right hip / knee</td><td>GPIO 13 / 26</td></tr>
+          <tr><td>Rear-left hip / knee</td><td>GPIO 17 / 19</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h3>Hardware limits</h3>
+        <ul>
+          <li>Hips only rotate in the horizontal plane</li>
+          <li>Knees raise and lower each foot</li>
+          <li>Commands arrive over Wi-Fi on port 8765</li>
+          <li>No distance sensor and no camera</li>
+        </ul>
+      </div>
+    </div>
+  </aside>
+</main>
+<footer>
+  <div>
+    <h2>How these neurons reach the robot</h2>
+    <div class="flow">
+      <div class="step"><b style="color:var(--compass)">EPG compass</b><span>Heading sits in a bump on the ellipsoid body. The computer reads the population vector as an angle.</span></div>
+      <div class="step"><b style="color:var(--update)">PEN / PEG</b><span>Compass update circuit. When the head turns, the bump moves around the ring.</span></div>
+      <div class="step"><b style="color:var(--steer)">PFL</b><span>Connects the compass to descending neurons. They stay in the steering circuit on this page.</span></div>
+      <div class="step"><b style="color:var(--descend)">DNa01 / DNa02</b><span>One descending neuron on each side. A large error shortens one side's step and the body turns.</span></div>
+    </div>
+  </div>
+  <div class="card" style="margin:0">
+    <h3>Not on this robot</h3>
+    <p>The full fly brain is about 140,000 neurons, including vision, taste, the giant-fiber escape circuit, the proboscis, and motor neurons for six legs. Those are outside this set of 167, so this robot does not react to sugar, shadows, or antennae.</p>
+  </div>
+</footer>
+<script src="brain_data.js"></script>
+<script>
+const ROLE_COLOR = { compass: "#5ec8ff", update: "#c084fc", steer: "#6ee7b7", descend: "#fcd34d" };
+const ROLE_NAME = { compass: "Compass", update: "Update", steer: "Steering", descend: "Descending" };
+const data = window.BRAIN;
+const neurons = data.neurons;
+document.getElementById("nCount").textContent = neurons.length;
+document.getElementById("eCount").textContent = data.edges.length;
+
+const types = [];
+const byType = new Map();
+neurons.forEach((n, i) => {
+  if (!byType.has(n.t)) {
+    byType.set(n.t, { name: n.t, role: n.r, ids: [] });
+    types.push(byType.get(n.t));
+  }
+  byType.get(n.t).ids.push(i);
+});
+const order = ["EPG", "EPGt", "PEG", "PEN_a(PEN1)", "PEN_b(PEN2)", "PFL1", "PFL2", "PFL3", "DNa02", "DNa01"];
+types.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
+
+let selected = null;
+const typeBox = document.getElementById("types");
+types.forEach((t) => {
+  const btn = document.createElement("button");
+  btn.className = "type";
+  btn.innerHTML = `<span class="dot" style="background:${ROLE_COLOR[t.role]}"></span><span>${t.name}<br><small style="color:#8b95a8">${ROLE_NAME[t.role]}</small></span><span class="count">${t.ids.length}</span>`;
+  btn.onclick = () => {
+    selected = selected === t.name ? null : t.name;
+    document.querySelectorAll("button.type").forEach((el) => el.classList.remove("on"));
+    if (selected) btn.classList.add("on");
+  };
+  typeBox.appendChild(btn);
+});
+
+const xs = neurons.map((n) => n.x), ys = neurons.map((n) => n.y), zs = neurons.map((n) => n.z);
+const mid = (arr) => (Math.min(...arr) + Math.max(...arr)) / 2;
+const cx = mid(xs), cy = mid(ys), cz = mid(zs);
+const scale0 = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+const pts = neurons.map((n) => [(n.x - cx) / scale0, (n.y - cy) / scale0, (n.z - cz) / scale0 * 4]);
+
+const canvas = document.getElementById("view");
+const ctx = canvas.getContext("2d");
+let yaw = 0.6, pitch = 0.35, zoom = 1, drag = null;
+
+function resize() {
+  const r = canvas.getBoundingClientRect();
+  canvas.width = r.width * devicePixelRatio;
+  canvas.height = r.height * devicePixelRatio;
+}
+window.addEventListener("resize", resize);
+resize();
+
+canvas.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY, yaw, pitch }; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  yaw = drag.yaw + (e.clientX - drag.x) * 0.01;
+  pitch = Math.max(-1.2, Math.min(1.2, drag.pitch + (e.clientY - drag.y) * 0.01));
+});
+canvas.addEventListener("pointerup", () => { drag = null; });
+canvas.addEventListener("wheel", (e) => { e.preventDefault(); zoom = Math.max(0.5, Math.min(3, zoom * (e.deltaY > 0 ? 0.92 : 1.08))); }, { passive: false });
+
+function project(p) {
+  const cyaw = Math.cos(yaw), syaw = Math.sin(yaw);
+  const cp = Math.cos(pitch), sp = Math.sin(pitch);
+  let x = p[0] * cyaw - p[1] * syaw;
+  let z = p[0] * syaw + p[1] * cyaw;
+  let y = p[2] * cp - z * sp;
+  z = p[2] * sp + z * cp;
+  const w = canvas.width, h = canvas.height;
+  const s = Math.min(w, h) * 0.92 * zoom;
+  return [w / 2 + x * s, h / 2 + y * s, z];
+}
+
+function frame() {
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  const projected = pts.map(project);
+  ctx.lineWidth = 1;
+  data.edges.forEach(([a, b]) => {
+    const show = !selected || neurons[a].t === selected || neurons[b].t === selected;
+    if (!show) return;
+    ctx.strokeStyle = selected ? "rgba(255,255,255,0.13)" : "rgba(255,255,255,0.035)";
+    ctx.beginPath();
+    ctx.moveTo(projected[a][0], projected[a][1]);
+    ctx.lineTo(projected[b][0], projected[b][1]);
+    ctx.stroke();
+  });
+  const orderIdx = projected.map((p, i) => [p[2], i]).sort((a, b) => a[0] - b[0]);
+  orderIdx.forEach(([, i]) => {
+    const n = neurons[i];
+    const on = !selected || n.t === selected;
+    ctx.fillStyle = ROLE_COLOR[n.r];
+    ctx.globalAlpha = on ? 0.95 : 0.08;
+    ctx.beginPath();
+    ctx.arc(projected[i][0], projected[i][1], (n.r === "descend" ? 5 : 2.4) * devicePixelRatio, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
