@@ -4,6 +4,9 @@ The computer is the brain. The robot is the body.
 
 ![The quad robot](docs/robot.jpg)
 
+![Uploading image.png…]()
+
+
 The photo shows the four-legged robot. The ESP32 sits in the middle, and the red light means the board is powered. The wires go to eight servos. The motors on the limbs only rotate the legs sideways. The motors on the feet raise and lower each foot.
 
 The brain runs on the computer, not on the board. The neurons come from the [FlyWire Codex FAFB fruit-fly brain](https://codex.flywire.ai/?dataset=fafb). The loaded set is the heading and steering group: 167 neurons, including EPG, PEN, PEG, PFL, DNa01, and DNa02, with 1,968 synapses between them. The computer uses these neurons to decide the current heading and whether to turn or walk forward, then sends that command to the ESP32. The robot only moves the eight servos.
