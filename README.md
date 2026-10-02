@@ -4,7 +4,6 @@ The computer is the brain. The robot is the body.
 
 ![The quad robot](docs/robot.jpg)
 
-![Uploading image.png…]()
 
 
 The photo shows the four-legged robot. The ESP32 sits in the middle, and the red light means the board is powered. The wires go to eight servos. The motors on the limbs only rotate the legs sideways. The motors on the feet raise and lower each foot.
