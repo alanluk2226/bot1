@@ -1,19 +1,20 @@
-"""電腦是大腦，機器人是軀體。
+"""The computer is the brain. The robot is the body.
 
-神經元來自 FlyWire FAFB v783（Schlegel 等人 2024 的註解表），
-突觸來自同一版的 proofread_connections。只載入朝向與轉向這一小群，
-在電腦上算活動，再把左右差收成前進或轉向，送給 ESP32。
+Neurons are the FlyWire FAFB v783 heading set (Schlegel et al., Nature 2024).
+Synapses are the matching proofread connection table. Only the heading and
+steering group is loaded. Activity is computed on the computer, then sent to
+the ESP32 as a straight step or a curved step of the same gait.
 """
 
 import csv
 import json
 import math
 import os
+import random
+import socket
 import sys
+import threading
 import time
-
-sys.path.insert(0, r"C:\Users\user\Desktop\bot1")
-from fly_brain import upload_and_run, read_until
 
 DATA = r"C:\Users\user\Desktop\bot1\data\flywire"
 ANNOTATIONS = os.path.join(DATA, "neuron_annotations.tsv")
@@ -145,7 +146,8 @@ class SteeringBrain:
         ]
         self.heading = 0.0
         self.goal = 90.0
-        self.turn_step = 35.0
+        self.turn_step = 7.0
+        self.threshold = 8.0
         self.dna = [
             i
             for i, n in enumerate(self.neurons)
@@ -170,7 +172,7 @@ class SteeringBrain:
             rates = [0.5 * old + 0.5 * new for old, new in zip(rates, nxt)]
         return rates
 
-    def decide(self):
+    def sense(self):
         rates = self.activity()
         vx = vy = 0.0
         for i, n in enumerate(self.neurons):
@@ -179,13 +181,17 @@ class SteeringBrain:
             vx += rates[i] * math.cos(n["angle"])
             vy += rates[i] * math.sin(n["angle"])
         estimate = math.degrees(math.atan2(vy, vx)) % 360.0
-        error = (self.goal - estimate + 180.0) % 360.0 - 180.0
         left = sum(rates[i] for i in self.dna if self.neurons[i]["side"] == "left")
         right = sum(rates[i] for i in self.dna if self.neurons[i]["side"] == "right")
-        if error > 30:
+        return estimate, left, right
+
+    def decide(self):
+        estimate, left, right = self.sense()
+        error = (self.goal - estimate + 180.0) % 360.0 - 180.0
+        if error > self.threshold:
             command = "right"
             self.heading = (self.heading + self.turn_step) % 360.0
-        elif error < -30:
+        elif error < -self.threshold:
             command = "left"
             self.heading = (self.heading - self.turn_step) % 360.0
         else:
@@ -193,10 +199,192 @@ class SteeringBrain:
         return command, estimate, error, left, right
 
 
-def send(ser, command):
-    ser.write((command + "\n").encode("utf-8"))
-    reply = read_until(ser, "ok", 8)
-    return "ok" in reply
+IP_FILE = r"C:\Users\user\Desktop\bot1\data\robot_ip.txt"
+PORT = 8765
+HIP = 28
+KNEE = 36
+# Front-right, front-left, rear-right, rear-left. The fly's tripod, reduced to a quadruped, steps on the diagonal: front-left with rear-right, then front-right with rear-left.
+LEGS = (
+    (0, 1, 2, -1, "right"),
+    (1, -1, 3, -1, "left"),
+    (4, -1, 6, 1, "right"),
+    (5, -1, 7, 1, "left"),
+)
+BASE_PHASE = (0.5, 0.0, 0.0, 0.5)
+
+
+def _smooth(u):
+    return 0.5 - 0.5 * math.cos(math.pi * u)
+
+
+def _leg(phase, hip_sign, knee_sign, hip_dir, knee):
+    phase = phase % 1.0
+    if phase < 0.18:
+        u = _smooth(phase / 0.18)
+        knee_u = u
+        hip_u = -1.0
+    elif phase < 0.42:
+        u = _smooth((phase - 0.18) / 0.24)
+        knee_u = 1.0
+        hip_u = -1.0 + 2.0 * u
+    elif phase < 0.56:
+        u = _smooth((phase - 0.42) / 0.14)
+        knee_u = 1.0 - u
+        hip_u = 1.0
+    else:
+        u = _smooth((phase - 0.56) / 0.44)
+        knee_u = 0.0
+        hip_u = 1.0 - 2.0 * u
+    hip = 90 + hip_sign * hip_dir * HIP * hip_u
+    knee_angle = 90 + knee_sign * knee * knee_u
+    return hip, knee_angle
+
+
+def _hip_dirs(error):
+    # A right turn lengthens the left step and shortens the right step, the same side bias DNa02 uses, with a cap so the body does not slide sideways.
+    mix = min(0.4, abs(error) / 120.0)
+    weaken = "right" if error > 0 else "left"
+    dirs = []
+    for *_idx, side in LEGS:
+        dirs.append(1.0 - mix if side == weaken else 1.0)
+    return dirs
+
+
+def _pose(phase, hip_dirs, knee):
+    pose = [90] * 8
+    nudge = hip_dirs[0] - hip_dirs[1]
+    for n, (hip_i, hip_s, knee_i, knee_s, side) in enumerate(LEGS):
+        shift = -0.05 * nudge if side == "right" else 0.05 * nudge
+        hip, knee_angle = _leg(
+            phase + BASE_PHASE[n] + shift,
+            hip_s,
+            knee_s,
+            hip_dirs[n],
+            knee,
+        )
+        pose[hip_i] = max(0, min(180, int(round(hip))))
+        pose[knee_i] = max(0, min(180, int(round(knee_angle))))
+    return pose
+
+
+def once(ip, command):
+    sock = socket.create_connection((ip, PORT), 8)
+    sock.settimeout(12)
+    sock.sendall((command + "\n").encode("utf-8"))
+    reply = sock.recv(32).decode("utf-8", "replace").strip()
+    sock.close()
+    return reply
+
+
+def _send_pose(ip, ms, pose, stop):
+    if stop is not None and stop.is_set():
+        return "stop"
+    command = "m %d %s" % (ms, " ".join(str(v) for v in pose))
+    reply = once(ip, command)
+    if stop is not None and stop.is_set():
+        return "stop"
+    return reply
+
+
+RUN_MS = 300
+JOG_MS = 740
+TURN_ERROR = 40.0
+
+
+def stride(ip, error, knee, stop=None, period=RUN_MS):
+    if stop is not None and stop.is_set():
+        return "stop"
+    reply = once(ip, "bias %d %d" % (int(round(error)), period))
+    if stop is not None and stop.is_set():
+        return "stop"
+    return reply
+
+
+class Wander:
+    # Jog, run, and turn each start on their own. Nothing waits for a fixed step count.
+    def __init__(self):
+        self.turn_left = 0
+        self.turn_sign = 1.0
+        self.pace_left = 0
+        self.pace = RUN_MS
+        self.pace_name = "run"
+
+    def begin_turn(self):
+        self.turn_left = random.randint(3, 10)
+        self.turn_sign = random.choice((-1.0, 1.0))
+        side = "right" if self.turn_sign > 0 else "left"
+        print("turn", self.turn_left, side)
+
+    def begin_pace(self):
+        if random.random() < 0.5:
+            self.pace = JOG_MS
+            self.pace_name = "jog"
+            self.pace_left = random.randint(2, 6)
+        else:
+            self.pace = RUN_MS
+            self.pace_name = "run"
+            self.pace_left = random.randint(2, 8)
+        print(self.pace_name, self.pace_left, self.pace)
+
+    def step(self, brain):
+        if self.turn_left <= 0 and random.random() < 0.18:
+            self.begin_turn()
+        if self.turn_left > 0:
+            error = TURN_ERROR * self.turn_sign
+            brain.heading = (brain.heading + brain.turn_step * self.turn_sign) % 360.0
+            self.turn_left -= 1
+        else:
+            error = 0.0
+        if self.pace_left <= 0:
+            self.begin_pace()
+        self.pace_left -= 1
+        return error, self.pace
+
+
+def _knee_now(brain):
+    peak = max(
+        (brain.activity()[i] for i, n in enumerate(brain.neurons) if n["role"] == "compass"),
+        default=1.0,
+    )
+    return KNEE * min(1.0, max(0.7, peak))
+
+
+def _watch_stop(stop):
+    while not stop.is_set():
+        line = sys.stdin.readline()
+        if not line:
+            stop.set()
+            return
+        if line.strip().lower() == "stop":
+            stop.set()
+            return
+
+
+def live(ip, brain):
+    stop = threading.Event()
+    threading.Thread(target=_watch_stop, args=(stop,), daemon=True).start()
+    print("Jog, run, and turns start on their own. A turn keeps the same gait for 3 to 10 steps. Type stop and press Enter to stand and halt.")
+    brain.heading = 0.0
+    brain.goal = 0.0
+    wander = Wander()
+    while not stop.is_set():
+        estimate, left, right = brain.sense()
+        error, period = wander.step(brain)
+        print(
+            "walk",
+            wander.pace_name,
+            period,
+            "EPG",
+            round(estimate),
+            "curve",
+            round(error),
+            "DNa02 L",
+            round(left, 4),
+            "R",
+            round(right, 4),
+        )
+        stride(ip, error, _knee_now(brain), stop, period)
+    print("stand", once(ip, "stop"))
 
 
 def main():
@@ -214,36 +402,44 @@ def main():
         len(circuit["edges"]),
         "synapses",
     )
+    try:
+        ip = open(IP_FILE, encoding="utf-8").read().strip()
+    except OSError:
+        raise SystemExit("missing data/robot_ip.txt")
     brain = SteeringBrain(circuit)
-    brain.goal = 90.0
-    ser = upload_and_run()
-    boot = read_until(ser, "READY", 8)
-    print(boot[-160:])
-    if "READY" not in boot:
-        ser.close()
-        raise SystemExit("not ready")
-    for step in range(6):
-        command, estimate, error, left, right = brain.decide()
-        print(
-            "step",
-            step + 1,
-            "EPG",
-            round(estimate),
-            "error",
-            round(error),
-            "DNa02 L",
-            round(left, 4),
-            "R",
-            round(right, 4),
-            "->",
-            command,
-        )
-        if not send(ser, command):
-            print("NO_REPLY")
-            break
-    send(ser, "stop")
-    ser.close()
-    print("DONE")
+    brain.heading = 0.0
+    brain.goal = 0.0
+    brain.turn_step = 7.0
+    if len(sys.argv) > 1:
+        steps = int(sys.argv[1])
+        wander = Wander()
+        for step in range(steps):
+            estimate, left, right = brain.sense()
+            error, period = wander.step(brain)
+            print(
+                "step",
+                step + 1,
+                wander.pace_name,
+                period,
+                "EPG",
+                round(estimate),
+                "curve",
+                round(error),
+                "DNa02 L",
+                round(left, 4),
+                "R",
+                round(right, 4),
+                "knee",
+                round(_knee_now(brain)),
+            )
+            reply = stride(ip, error, _knee_now(brain), None, period)
+            print(" ", reply)
+            if reply != "ok":
+                break
+        print("stand", once(ip, "stop"))
+        print("DONE")
+        return
+    live(ip, brain)
 
 
 if __name__ == "__main__":

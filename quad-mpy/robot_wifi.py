@@ -14,10 +14,10 @@ class RobotWifi:
             with open(html_path, 'r', encoding='utf-8') as file:
                 self.html = file.read()
         except OSError as e:
-            assert False, f"错误: 缺少 index.html 文件, 请不要忘记上传"
+            assert False, f"missing index.html; upload that file too"
 
     def create_connect_ap(self, essid, password, ifconfig=None):
-        """AP 模式: 手机和esp32直连(不通过路由)"""
+        """Access-point mode: the phone joins the ESP32 directly, with no router."""
         ap = network.WLAN(network.AP_IF)
         if ifconfig:
             ap.ifconfig(ifconfig)
@@ -30,10 +30,10 @@ class RobotWifi:
         return ip
 
     def create_connect_route(self, ssid, password, ifconfig=None, timeout=12):
-        """STA 模式: esp32连路由，手机连路由"""
+        """Station mode: the ESP32 and the phone both join the router."""
         wlan = network.WLAN(network.STA_IF)
         if ifconfig:
-            # 自定义固定的 ip 在址，否则每次连接的 ip 可能会不一样
+            # Fixed address. Without it, the router may hand out a new one each time.
             wlan.ifconfig(ifconfig)
         wlan.active(True)
         if not wlan.isconnected():
@@ -41,11 +41,11 @@ class RobotWifi:
             wlan.connect(ssid, password)
             i = 1
             while not wlan.isconnected():
-                print("正在链接...{}".format(i))
+                print("connecting...{}".format(i))
                 i += 1
                 time.sleep(1)
                 if i > timeout:
-                    raise OSError(f"WiFi 连接超时, 请检查 WiFi 名称和密码, 并确保连接的是 2.4G WiFi(不支持 5G WiFi)")
+                    raise OSError("Wi-Fi timed out. Check the name and password. The ESP32 joins 2.4 GHz only.")
         ip = wlan.ifconfig()[0]
         machine.PWM(machine.Pin(2), duty=512)
         print("ip:", ip)
@@ -55,7 +55,7 @@ class RobotWifi:
         try:
             command = json.loads(post_data).get("command")
         except ValueError as e:
-            err = "JSON 解析错误: " + str(e)
+            err = "JSON parse error: " + str(e)
             print(err)
             return json.dumps({"status": "400", "msg": err})
         
@@ -70,7 +70,7 @@ class RobotWifi:
                 print(err)
                 return json.dumps({"status": "500", "msg": err})
         else:
-            return json.dumps({"status": "400", "msg": "缺少 command 参数"})
+            return json.dumps({"status": "400", "msg": "missing command"})
 
     def handle_get_request(self):
         response_headers = 'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n'
@@ -92,21 +92,14 @@ class RobotWifi:
         client_socket.send(response.encode('utf-8'))
         client_socket.close()
 
-    # 创建HTTP服务器
+    # HTTP server
     def create_server(self):
-        # 创建 TCP/IP 套接字
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # 设置套接字选项，允许地址重用
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-        # 绑定套接字到本地地址和端口
         server_socket.bind(('', 80))
-        # 开始监听传入连接，能够同时处理的最大连接数为 128
         server_socket.listen(128)
         print('HTTP server started!')
 
         while True:
-            # 接受一个客户端连接
             client_socket, addr = server_socket.accept()
-            # 处理客户端请求
             self.handle_request(client_socket)

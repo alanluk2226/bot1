@@ -127,6 +127,38 @@
     border-radius: 10px;
     background: #0a0c12;
   }
+  .cmd input, .cmd button {
+    font: inherit;
+    color: var(--text);
+    background: #0b0d14;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .cmd input {
+    width: 100%;
+    margin-top: 8px;
+    padding: 10px;
+  }
+  .moves {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .moves button, .cmd .wide {
+    min-height: 44px;
+    padding: 10px;
+    cursor: pointer;
+  }
+  .cmd .wide { width: 100%; margin-top: 8px; }
+  #phoneStatus { color: var(--muted); min-height: 1.3em; margin: 8px 0 0; }
+  @media (max-width: 860px) {
+    body { height: auto; min-height: 100vh; overflow: auto; grid-template-rows: auto auto auto; }
+    main { display: flex; flex-direction: column; }
+    aside.right { order: -1; border-left: 0; }
+    section.stage { height: 70vw; min-height: 280px; }
+    footer { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
@@ -165,6 +197,23 @@
       <h2>Robot</h2>
       <canvas id="robot3d" class="robot" aria-label="3D model of the quadruped"></canvas>
       <p class="note">Drag the model to turn it. This is a simplified body of this robot: one chassis, eight servos, four legs.</p>
+      <h2>Phone</h2>
+      <div class="card cmd">
+        <h3>Send a command</h3>
+        <p>The phone and the robot join the same network. Forward, Back, Left, and Right each take one step. Auto keeps walking until Stop.</p>
+        <input id="robotAddr" inputmode="url" autocomplete="off" placeholder="robot address" aria-label="Robot address">
+        <button type="button" class="wide" data-cmd="auto">Auto</button>
+        <div class="moves">
+          <button type="button" data-cmd="left">Left</button>
+          <button type="button" data-cmd="right">Right</button>
+        </div>
+        <button type="button" class="wide" data-cmd="forward">Forward</button>
+        <button type="button" class="wide" data-cmd="back">Back</button>
+        <button type="button" class="wide" data-cmd="stop">Stop</button>
+        <input id="robotCmd" autocomplete="off" placeholder="forward, back, stop, hello" aria-label="Command">
+        <button type="button" class="wide" id="sendCmd">Send</button>
+        <p id="phoneStatus"></p>
+      </div>
       <div class="card">
         <h3>Eight servos</h3>
         <table>
@@ -179,7 +228,7 @@
         <ul>
           <li>Hips only rotate in the horizontal plane</li>
           <li>Knees raise and lower each foot</li>
-          <li>Commands arrive over Wi-Fi on port 8765</li>
+          <li>The computer uses port 8765. A phone on the same network uses port 80.</li>
           <li>No distance sensor and no camera</li>
         </ul>
       </div>
@@ -410,6 +459,47 @@ function drawRobot() {
   requestAnimationFrame(drawRobot);
 }
 drawRobot();
+</script>
+<script>
+const COMMANDS = ["auto", "walk", "reverse", "forward", "back", "left", "right", "stop", "hello"];
+const addrInput = document.getElementById("robotAddr");
+const cmdInput = document.getElementById("robotCmd");
+const phoneStatus = document.getElementById("phoneStatus");
+addrInput.value = localStorage.getItem("bot1-addr") || "";
+
+async function sendRobot(command) {
+  const cmd = (command || "").trim().toLowerCase();
+  const host = addrInput.value.trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  if (!COMMANDS.includes(cmd)) {
+    phoneStatus.textContent = "Use forward, back, stop, or hello.";
+    return;
+  }
+  if (!host) {
+    phoneStatus.textContent = "Type the robot address first.";
+    return;
+  }
+  localStorage.setItem("bot1-addr", host);
+  if (location.protocol === "https:") {
+    phoneStatus.textContent = "This secure page cannot reach the robot. On the phone, open http://" + host + "/";
+    return;
+  }
+  phoneStatus.textContent = "Sending " + cmd + "…";
+  try {
+    const res = await fetch("http://" + host + "/cmd?c=" + encodeURIComponent(cmd), { cache: "no-store" });
+    const text = (await res.text()).trim();
+    phoneStatus.textContent = text !== "ok" ? "Robot replied " + text : (cmd === "auto" ? "fly walk" : (cmd === "stop" ? "standing" : cmd + " ok"));
+  } catch (err) {
+    phoneStatus.textContent = "No reply. The phone and the robot must be on the same Wi-Fi or hotspot.";
+  }
+}
+
+document.querySelectorAll("[data-cmd]").forEach((button) => {
+  button.addEventListener("click", () => sendRobot(button.getAttribute("data-cmd")));
+});
+document.getElementById("sendCmd").addEventListener("click", () => sendRobot(cmdInput.value));
+cmdInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") sendRobot(cmdInput.value);
+});
 </script>
 </body>
 </html>

@@ -1,12 +1,13 @@
-"""果蠅大腦照官方 walk() 的八個姿勢，逐顆下達八個馬達角度。"""
+"""Play the eight poses of the kit walk(), one servo angle at a time."""
 
 import sys
 
 sys.path.insert(0, r"C:\Users\user\Desktop\bot1")
 from fly_brain import FlyBrain, upload_and_run, read_until
 
-# quad.py walk()，a=16 ao=50 b=5 c=-30 co=10。順序同 init：
-# 右前髖、左前髖、右前膝、左前膝、右後髖、左後髖、右後膝、左後膝。
+# quad.py walk(), a=16 ao=50 b=5 c=-30 co=10. Servo order matches init:
+# front-right hip, front-left hip, front-right knee, front-left knee,
+# rear-right hip, rear-left hip, rear-right knee, rear-left knee.
 A, AO, B, C, CO = 16, 50, 5, -30, 10
 
 
@@ -17,42 +18,42 @@ def frame(*terms):
 def official_steps():
     a, ao, b, c, co = A, AO, B, C, CO
     return (
-        ("右前落地", frame(
+        ("front-right down", frame(
             90 + 2.0 * a - ao, 90 - 4.0 * a + ao,
             90 + c + 5 * b, 90 - c - 4 * b,
             90 + 3.0 * a - co, 90 - 1.0 * a + co,
             90 - c - 4 * b - 10, 90 + c + 6 * b)),
-        ("抬起左前腳", frame(
+        ("lift front-left", frame(
             90 + 2.3 * a - ao, 90 - 2.0 * a + ao,
             90 + c + 5 * b, 90 - c - 0 * b,
             90 + 3.3 * a - co, 90 - 1.3 * a + co,
             90 - c - 4 * b - 10, 90 + c + 6 * b)),
-        ("左後落地", frame(
+        ("rear-left down", frame(
             90 + 3.0 * a - ao, 90 - 1.0 * a + ao,
             90 + c + 4 * b, 90 - c - 6 * b,
             90 + 4.0 * a - co, 90 - 2.0 * a + co,
             90 - c - 4 * b - 10, 90 + c + 5 * b)),
-        ("抬起右後腳", frame(
+        ("lift rear-right", frame(
             90 + 3.3 * a - ao, 90 - 1.3 * a + ao,
             90 + c + 4 * b, 90 - c - 6 * b,
             90 + 2.0 * a - co, 90 - 2.3 * a + co,
             90 - c - 0 * b - 10, 90 + c + 5 * b)),
-        ("左前落地", frame(
+        ("front-left down", frame(
             90 + 4.0 * a - ao, 90 - 2.0 * a + ao,
             90 + c + 4 * b, 90 - c - 5 * b,
             90 + 1.0 * a - co, 90 - 3.0 * a + co,
             90 - c - 6 * b - 10, 90 + c + 4 * b)),
-        ("抬起右前腳", frame(
+        ("lift front-right", frame(
             90 + 2.0 * a - ao, 90 - 2.3 * a + ao,
             90 + c + 0 * b, 90 - c - 5 * b,
             90 + 1.3 * a - co, 90 - 3.3 * a + co,
             90 - c - 6 * b - 10, 90 + c + 4 * b)),
-        ("右後落地", frame(
+        ("rear-right down", frame(
             90 + 1.0 * a - ao, 90 - 3.0 * a + ao,
             90 + c + 6 * b, 90 - c - 4 * b,
             90 + 2.0 * a - co, 90 - 4.0 * a + co,
             90 - c - 5 * b - 10, 90 + c + 4 * b)),
-        ("抬起左後腳", frame(
+        ("lift rear-left", frame(
             90 + 1.3 * a - ao, 90 - 3.3 * a + ao,
             90 + c + 6 * b, 90 - c - 4 * b,
             90 + 2.3 * a - co, 90 - 2.0 * a + co,
@@ -72,7 +73,7 @@ def send(ser, ms, pose):
 
 def play_forward(ser, t=800):
     for name, pose in official_steps():
-        ms = t if "落地" in name else max(120, t // 3)
+        ms = t if name.endswith("down") else max(120, t // 3)
         print(name, pose)
         if not send(ser, ms, pose):
             return False

@@ -3,3 +3,5 @@ __pycache__/
 .venv/
 data/flywire/*.tsv
 data/flywire/*.feather
+data/robot_ip.txt
+quad-mpy/wifi_config.py

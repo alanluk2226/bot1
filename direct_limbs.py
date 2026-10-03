@@ -1,16 +1,16 @@
-"""只動腳部馬達，把下垂的腿往上擺。肢體馬達保持 90 度。"""
+"""Move only the foot servos, lifting each dangling foot. Limb servos stay at 90 degrees."""
 
 import sys
 
 sys.path.insert(0, r"C:\Users\user\Desktop\bot1")
 from fly_brain import upload_and_run, read_until
 
-# 膝索引、抬高角度、名稱。90 是垂下貼地，離開 90 腳端才會升高。
+# Knee index, lift angle, name. 90 hangs the foot on the floor. Leaving 90 raises the foot.
 FEET = (
-    (3, 145, "左前"),
-    (2, 35, "右前"),
-    (7, 145, "左後"),
-    (6, 145, "右後"),
+    (3, 145, "front-left"),
+    (2, 35, "front-right"),
+    (7, 145, "rear-left"),
+    (6, 145, "rear-right"),
 )
 
 

@@ -1,4 +1,4 @@
-"""上傳官方彈起、跳舞、打招呼，演完後恢復指令模式。"""
+"""Upload the kit jump, dance, and wave, then return to command mode."""
 
 import sys
 

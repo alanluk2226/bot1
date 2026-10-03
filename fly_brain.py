@@ -1,4 +1,4 @@
-"""電腦上的果蠅大腦：只下前進、左轉、右轉、停止。腿的動作在機器人上。"""
+"""A small heading brain on the computer. It only sends forward, left, right, and stop. The legs move on the robot."""
 
 import math
 import time
@@ -7,7 +7,7 @@ import serial
 
 
 class FlyBrain:
-    """簡化的中央複合體：環形神經元記住朝向，和目標的夾角決定轉向或前進。"""
+    """A small central complex: a ring of neurons holds heading, and the angle to the goal chooses a turn or a straight step."""
 
     def __init__(self):
         self.heading = 0.0

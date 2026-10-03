@@ -164,22 +164,20 @@ class Oscillator:
 
 
 if __name__ == '__main__':
-    # 振荡器
+    # Oscillator. y = A*sin(2*pi*x/T + Ph) + O
     os = Oscillator()
     os.attach(pin=25)
 
-    # (参考)正弦函数公式: y = A⋅sin(2πx/T + Ph) + O
-
-    # A（Amplitude）：振幅(角度 degrees -90~90)，它决定了舵机摆动的幅度。
+    # A: amplitude in degrees, about -90 to 90. Size of the swing.
     os.SetA(A=20)
 
-    # O（Offset）：偏移量(角度 degrees -90~90)，y轴偏移值, 它可以用来设置舵机的初始位置。
+    # O: offset in degrees, about -90 to 90. Rest position of the servo.
     os.SetO(O=10)
 
-    # T（Period）：周期(毫秒 ms)，振荡器一个完整周期的时间长度
+    # T: period in milliseconds. Length of one full cycle.
     os.SetT(T=1000)
 
-    # Ph（Phase）：相位(弧度 radians 0~2π)，x轴偏移值
+    # Ph: phase in radians, 0 to 2*pi. Shifts the cycle along time.
     os.SetPh(Ph=0)
 
     while True:

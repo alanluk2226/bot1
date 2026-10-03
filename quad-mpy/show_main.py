@@ -1,4 +1,4 @@
-"""官方動作：彈起、跳舞、打招呼。結束後繼續抓住舵機。"""
+"""Kit motions: jump, dance, and wave. The servos stay powered when the show ends."""
 
 import utime
 from quad import Quad

@@ -159,35 +159,35 @@ class Quad:
         step1 = [90 + 2.0 * a - ao, 90 - 4.0 * a + ao,
                  90 + c + 5 * b, 90 - c - 4 * b,
                  90 + 3.0 * a - co, 90 - 1.0 * a + co,
-                 90 - c - 4 * b - 10, 90 + c + 6 * b]  # 右前(1,3)最后
+                 90 - c - 4 * b - 10, 90 + c + 6 * b]  # front-right lands last
         step2 = [90 + 2.3 * a - ao, 90 - 2.0 * a + ao,
                  90 + c + 5 * b, 90 - c - 0 * b,
                  90 + 3.3 * a - co, 90 - 1.3 * a + co,
-                 90 - c - 4 * b - 10, 90 + c + 6 * b]  # 抬起 3
+                 90 - c - 4 * b - 10, 90 + c + 6 * b]  # lift servo 3
         step3 = [90 + 3.0 * a - ao, 90 - 1.0 * a + ao,
                  90 + c + 4 * b, 90 - c - 6 * b,
                  90 + 4.0 * a - co, 90 - 2.0 * a + co,
-                 90 - c - 4 * b - 10, 90 + c + 5 * b]  # 左后(4,6)最后
+                 90 - c - 4 * b - 10, 90 + c + 5 * b]  # rear-left lands last
         step4 = [90 + 3.3 * a - ao, 90 - 1.3 * a + ao,
                  90 + c + 4 * b, 90 - c - 6 * b,
                  90 + 2.0 * a - co, 90 - 2.3 * a + co,
-                 90 - c - 0 * b - 10, 90 + c + 5 * b]  # 抬起 6
+                 90 - c - 0 * b - 10, 90 + c + 5 * b]  # lift servo 6
         step5 = [90 + 4.0 * a - ao, 90 - 2.0 * a + ao,
                  90 + c + 4 * b, 90 - c - 5 * b,
                  90 + 1.0 * a - co, 90 - 3.0 * a + co,
-                 90 - c - 6 * b - 10, 90 + c + 4 * b]  # 左前(0,2)最后
+                 90 - c - 6 * b - 10, 90 + c + 4 * b]  # front-left lands last
         step6 = [90 + 2.0 * a - ao, 90 - 2.3 * a + ao,
                  90 + c + 0 * b, 90 - c - 5 * b,
                  90 + 1.3 * a - co, 90 - 3.3 * a + co,
-                 90 - c - 6 * b - 10, 90 + c + 4 * b]  # 抬起 2
+                 90 - c - 6 * b - 10, 90 + c + 4 * b]  # lift servo 2
         step7 = [90 + 1.0 * a - ao, 90 - 3.0 * a + ao,
                  90 + c + 6 * b, 90 - c - 4 * b,
                  90 + 2.0 * a - co, 90 - 4.0 * a + co,
-                 90 - c - 5 * b - 10, 90 + c + 4 * b]  # 右后(5,7)最后
+                 90 - c - 5 * b - 10, 90 + c + 4 * b]  # rear-right lands last
         step8 = [90 + 1.3 * a - ao, 90 - 3.3 * a + ao,
                  90 + c + 6 * b, 90 - c - 4 * b,
                  90 + 2.3 * a - co, 90 - 2.0 * a + co,
-                 90 - c - 5 * b - 10, 90 + c + 0 * b]  # 抬起 7
+                 90 - c - 5 * b - 10, 90 + c + 0 * b]  # lift servo 7
 
         self._moveServos(t, step1)
         self._moveServos(t / 3, step2)
