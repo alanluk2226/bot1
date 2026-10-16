@@ -1,4 +1,4 @@
-"""Upload the Wi-Fi settings and the body program, wait for the robot's IP, then send stop over the network so it stands."""
+"""Upload the body program and wait until Bluetooth is advertising as bot1."""
 
 import socket
 import sys
@@ -12,17 +12,38 @@ from fly_brain import read_until
 ROOT = r"C:\Users\user\Desktop\bot1\quad-mpy"
 
 
+def _raw(ser, code, timeout=6):
+    data = code.encode("utf-8")
+    if not data.endswith(b"\n"):
+        data += b"\n"
+    for i in range(0, len(data), 48):
+        ser.write(data[i:i + 48])
+        time.sleep(0.02)
+    ser.write(b"\x04")
+    end = time.time() + timeout
+    buf = b""
+    while time.time() < end:
+        buf += ser.read(4096)
+        if buf.count(b"\x04") >= 2:
+            break
+        time.sleep(0.02)
+    if b"Traceback" in buf:
+        raise SystemExit(buf.decode("utf-8", "replace")[-400:])
+    return buf
+
+
 def upload(ser, name, text):
     ser.write(b"\x01")
-    time.sleep(0.3)
-    ser.read(4096)
-    payload = "f=open(%s,'w');f.write(%s);f.close()\r\n" % (repr(name), repr(text))
-    ser.write(payload.encode("utf-8"))
-    ser.write(b"\x04")
-    time.sleep(0.8)
-    ser.read(2048)
+    time.sleep(0.2)
+    ser.read(8192)
+    raw = text.encode("utf-8")
+    _raw(ser, "f=open(%s,'wb')" % repr(name))
+    for i in range(0, len(raw), 128):
+        _raw(ser, "f.write(%s)" % repr(raw[i:i + 128]))
+    _raw(ser, "f.close()")
     ser.write(b"\x02")
     time.sleep(0.2)
+    ser.read(1024)
 
 
 def main():
@@ -44,23 +65,19 @@ def main():
     upload(ser, "wifi_config.py", wifi_src)
     upload(ser, "quad.py", quad_src)
     upload(ser, "main.py", main_src)
+    ser.write(b"\x01")
+    time.sleep(0.2)
+    ser.read(2048)
+    _raw(ser, "import bluetooth\ntry:\n    bluetooth.BLE().active(False)\nexcept Exception:\n    pass\n")
+    ser.write(b"\x02")
+    time.sleep(0.2)
     ser.write(b"\x04")
-    boot = read_until(ser, "WIFI ", 25)
-    print(boot[-400:])
+    boot = read_until(ser, "BLE bot1", 40)
+    print(boot[-800:])
     ser.close()
-    ip = ""
-    for line in boot.splitlines():
-        if line.startswith("WIFI "):
-            ip = line.split()[1]
-    if not ip or ip == "FAIL":
-        raise SystemExit("wifi did not connect")
-    open(r"C:\Users\user\Desktop\bot1\data\robot_ip.txt", "w", encoding="utf-8").write(ip + "\n")
-    sock = socket.create_connection((ip, 8765), 5)
-    sock.sendall(b"stop\n")
-    reply = sock.recv(32)
-    sock.close()
-    print("IP", ip)
-    print("REPLY", reply.decode("utf-8", "replace").strip())
+    if "BLE bot1" not in boot:
+        raise SystemExit("bluetooth did not start")
+    print("BLE bot1")
 
 
 if __name__ == "__main__":

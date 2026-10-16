@@ -1,4 +1,4 @@
-"""Command server for the body. The computer sends forward, back, left, right, stop, and auto. USB and Wi-Fi both work."""
+"""Command server for the body. The phone sends forward, back, left, right, stop, and auto over Bluetooth."""
 
 import sys
 import math
@@ -8,6 +8,11 @@ import select
 import socket
 from machine import Pin
 from quad import Quad
+
+try:
+    import bluetooth
+except ImportError:
+    bluetooth = None
 
 try:
     import wifi_config
@@ -329,6 +334,151 @@ PHONE_PAGE = """<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="vie
 
 ALLOWED = ("forward", "back", "left", "right", "stop", "hello", "walk", "reverse", "auto")
 
+# Nordic UART. The iPhone writes a command; the robot notifies the reply.
+_UART_UUID = bluetooth.UUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E") if bluetooth else None
+_UART_TX = bluetooth.UUID("6E400003-B5A3-F393-E0A9-E50E24DCCA9E") if bluetooth else None
+_UART_RX = bluetooth.UUID("6E400002-B5A3-F393-E0A9-E50E24DCCA9E") if bluetooth else None
+_BLE_PAD = {
+    b"1": "forward",
+    b"2": "back",
+    b"3": "left",
+    b"4": "right",
+    b"5": "auto",
+    b"6": "stop",
+}
+_ble = None
+_ble_tx = None
+_ble_rx_handle = None
+_ble_conn = None
+_ble_buf = bytearray(80)
+_ble_n = 0
+_ble_flag = False
+_ble_adv_at = 0
+
+
+def _adv_field(kind, value):
+    return bytes((len(value) + 1, kind)) + value
+
+
+def _ble_command(raw):
+    # Adafruit Bluefruit control pad: '!' 'B' <button 1-8> <'1' pressed or '0' released> checksum.
+    if len(raw) >= 4 and raw[0:2] == b"!B" and raw[3:4] == b"1":
+        return _BLE_PAD.get(raw[2:3])
+    text = raw.decode("utf-8", "replace").strip().lower().split("\n", 1)[0].strip()
+    if text in ALLOWED:
+        return text
+    return None
+
+
+def _ble_irq(event, data):
+    global _ble_conn, _ble_n, _ble_flag
+    if event == 1:
+        _ble_conn = data[0]
+        return
+    if event == 2:
+        _ble_conn = None
+        _ble_advertise()
+        return
+    if event == 3:
+        _conn, attr = data
+        if attr != _ble_rx_handle:
+            return
+        value = _ble.gatts_read(_ble_rx_handle)
+        n = len(value)
+        if n > len(_ble_buf):
+            n = len(_ble_buf)
+        _ble_buf[:n] = value[:n]
+        _ble_n = n
+        _ble_flag = True
+
+
+def _ble_advertise():
+    # The name has to sit in the main advertisement. iOS shows "Unknown" when it is only in the scan response.
+    global _ble_adv_at
+    if _ble is None:
+        return
+    payload = _adv_field(0x01, b"\x06") + _adv_field(0x09, b"bot1")
+    try:
+        uid = bytes(_UART_UUID)
+        if len(uid) == 16 and len(payload) + len(uid) + 2 <= 31:
+            payload += _adv_field(0x07, uid)
+    except Exception:
+        pass
+    _ble.gap_advertise(100000, payload)
+    _ble_adv_at = utime.ticks_ms()
+
+
+def start_ble():
+    global _ble, _ble_tx, _ble_rx_handle
+    if bluetooth is None:
+        print("BLE_SKIP")
+        return
+    try:
+        ble = bluetooth.BLE()
+        try:
+            ble.active(True)
+        except OSError:
+            ble.active(False)
+            utime.sleep_ms(300)
+            ble.active(True)
+        ble.config(gap_name="bot1")
+        ble.irq(_ble_irq)
+        ((_ble_tx, _ble_rx_handle),) = ble.gatts_register_services((
+            (
+                _UART_UUID,
+                (
+                    (_UART_TX, bluetooth.FLAG_NOTIFY),
+                    (_UART_RX, bluetooth.FLAG_WRITE | bluetooth.FLAG_WRITE_NO_RESPONSE),
+                ),
+            ),
+        ))
+        _ble = ble
+        _ble_advertise()
+        print("BLE bot1")
+        try:
+            from machine import RTC
+            RTC().memory(b"")
+        except Exception:
+            pass
+    except Exception as exc:
+        print("BLE_ERR", exc)
+        # A soft reboot leaves the controller stuck. One hard reset clears it.
+        try:
+            from machine import RTC, reset
+            rtc = RTC()
+            if rtc.memory() != b"ble-only":
+                rtc.memory(b"ble-only")
+                reset()
+        except Exception:
+            pass
+
+
+def _ble_keepalive():
+    if _ble is None or _ble_conn is not None:
+        return
+    if utime.ticks_diff(utime.ticks_ms(), _ble_adv_at) > 5000:
+        _ble_advertise()
+
+
+def _ble_poll(robot):
+    global _ble_flag
+    _ble_keepalive()
+    if not _ble_flag:
+        return
+    _ble_flag = False
+    cmd = _ble_command(bytes(_ble_buf[:_ble_n]))
+    if not cmd:
+        return
+    try:
+        reply = handle(robot, cmd)
+    except Exception:
+        reply = "err"
+    if _ble is not None and _ble_conn is not None:
+        try:
+            _ble.gatts_notify(_ble_conn, _ble_tx, (reply + "\n").encode())
+        except OSError:
+            pass
+
 
 def _unquote(text):
     text = text.replace("+", " ")
@@ -436,11 +586,20 @@ def _http_client(robot, client):
 
 
 def _listen(port):
-    server = socket.socket()
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind(("0.0.0.0", port))
-    server.listen(2)
-    return server
+    last = None
+    for _ in range(10):
+        server = socket.socket()
+        try:
+            server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            server.bind(("0.0.0.0", port))
+            server.listen(2)
+            return server
+        except OSError as exc:
+            last = exc
+            server.close()
+            utime.sleep_ms(400)
+    print("BIND_ERR", port, last)
+    raise last
 
 
 def _led():
@@ -450,15 +609,12 @@ def _led():
         led.value(1)
 
 
-def serve(robot, ip):
-    tcp_port = wifi_config.PORT
-    http_port = getattr(wifi_config, "HTTP_PORT", 80)
-    tcp = _listen(tcp_port)
-    http = _listen(http_port)
-    print("LISTEN", ip, tcp_port)
-    print("HTTP", ip, http_port)
+def serve(robot, ip, tcp, http):
+    print("LISTEN", ip, wifi_config.PORT)
+    print("HTTP", ip, getattr(wifi_config, "HTTP_PORT", 80))
     while True:
-        ready, _, _ = select.select([tcp, http], [], [], 0 if fly["on"] else 1)
+        _ble_poll(robot)
+        ready, _, _ = select.select([tcp, http], [], [], 0 if fly["on"] else 0.2)
         for sock in ready:
             try:
                 client, _addr = sock.accept()
@@ -478,22 +634,18 @@ def serve(robot, ip):
 
 
 def main():
+    # Bluetooth only. Wi-Fi and Bluetooth together run out of memory on this board.
+    start_ble()
     robot = Quad()
     robot.init(12, 16, 25, 18, 13, 17, 26, 19)
     robot.setTrims(0, 0, 0, 0, 0, 0, 0, 0)
     robot._moveServos(400, [90] * 8)
     print("READY")
-    ip = join_wifi()
-    if ip:
+    if _ble is not None:
         led.value(1)
-        serve(robot, ip)
-        return
     while True:
-        line = sys.stdin.readline()
-        if not line:
-            utime.sleep_ms(20)
-            continue
-        print(handle(robot, line.strip()))
+        _ble_poll(robot)
+        utime.sleep_ms(40)
 
 
 main()
